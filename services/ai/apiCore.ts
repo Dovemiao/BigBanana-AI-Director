@@ -19,6 +19,7 @@ import {
   getActiveChatModel,
   getActiveVideoModel,
   getActiveImageModel,
+  getActiveAudioModel,
 } from '../modelRegistry';
 import { fetchMediaWithCorsFallback } from '../mediaFetchService';
 
@@ -69,7 +70,7 @@ export const setGlobalApiKey = (key: string) => {
 const DEFAULT_API_BASE = 'https://api.antsk.cn';
 
 /** Resolve model by type and optional modelId */
-export const resolveModel = (type: 'chat' | 'image' | 'video', modelId?: string) => {
+export const resolveModel = (type: 'chat' | 'image' | 'video' | 'audio', modelId?: string) => {
   if (modelId) {
     const normalizedModelId = modelId.toLowerCase();
     // Keep alias compatibility for model registry lookup.
@@ -85,7 +86,7 @@ export const resolveModel = (type: 'chat' | 'image' | 'video', modelId?: string)
 };
 
 /** Resolve model name used in request body */
-export const resolveRequestModel = (type: 'chat' | 'image' | 'video', modelId?: string): string => {
+export const resolveRequestModel = (type: 'chat' | 'image' | 'video' | 'audio', modelId?: string): string => {
   // Preserve explicit 4k request model naming.
   if (modelId && modelId.toLowerCase() === 'veo_3_1-fast-4k') {
     return modelId;
@@ -102,7 +103,7 @@ export const resolveRequestModel = (type: 'chat' | 'image' | 'video', modelId?: 
  * 2) registry global key
  * 3) runtime fallback key
  */
-export const checkApiKey = (type: 'chat' | 'image' | 'video' = 'chat', modelId?: string): string => {
+export const checkApiKey = (type: 'chat' | 'image' | 'video' | 'audio' = 'chat', modelId?: string): string => {
   const resolvedModel = resolveModel(type, modelId);
   console.log('[checkApiKey] type/model/resolved:', type, modelId, resolvedModel?.id, resolvedModel?.providerId);
 
@@ -133,7 +134,7 @@ export const checkApiKey = (type: 'chat' | 'image' | 'video' = 'chat', modelId?:
 };
 
 /** Get API base URL for model/type */
-export const getApiBase = (type: 'chat' | 'image' | 'video' = 'chat', modelId?: string): string => {
+export const getApiBase = (type: 'chat' | 'image' | 'video' | 'audio' = 'chat', modelId?: string): string => {
   try {
     const resolvedModel = resolveModel(type, modelId);
     if (resolvedModel) {
@@ -156,7 +157,7 @@ export const getActiveChatModelName = (): string => {
 };
 
 // Re-export helpers from modelRegistry
-export { getActiveModel, getActiveChatModel, getActiveVideoModel, getActiveImageModel };
+export { getActiveModel, getActiveChatModel, getActiveVideoModel, getActiveImageModel, getActiveAudioModel };
 
 // ============================================
 // Generic helpers

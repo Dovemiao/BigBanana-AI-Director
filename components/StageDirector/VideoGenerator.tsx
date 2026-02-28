@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Video, Loader2, Edit2 } from 'lucide-react';
-import { Shot, AspectRatio, VideoDuration } from '../../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Video, Loader2, Edit2, Mic, Trash2 } from 'lucide-react';
+import { Shot, AspectRatio, VideoDuration, DubbingMode } from '../../types';
 import { VideoSettingsPanel } from '../AspectRatioSelector';
 import { resolveVideoModelRouting } from './utils';
 import { 
@@ -8,9 +8,11 @@ import {
   getDefaultVideoDuration,
   getVideoModels,
   getActiveVideoModel,
+  getAudioModels,
+  getActiveAudioModel,
   getProviderById,
 } from '../../services/modelRegistry';
-import { VideoModelDefinition } from '../../types/model';
+import { VideoModelDefinition, AudioModelDefinition } from '../../types/model';
 import { useResolvedVideoUrl } from '../../hooks/useResolvedVideoUrl';
 
 interface VideoGeneratorProps {
@@ -18,6 +20,8 @@ interface VideoGeneratorProps {
   hasStartFrame: boolean;
   hasEndFrame: boolean;
   onGenerate: (aspectRatio: AspectRatio, duration: VideoDuration, modelId: string) => void;
+  onGenerateDubbing: (mode: DubbingMode, text: string, modelId?: string) => void;
+  onClearDubbing: () => void;
   onEditPrompt: () => void;
   onModelChange?: (modelId: string) => void;
 }
@@ -27,6 +31,8 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
   hasStartFrame,
   hasEndFrame,
   onGenerate,
+  onGenerateDubbing,
+  onClearDubbing,
   onEditPrompt,
   onModelChange
 }) => {
@@ -101,6 +107,25 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
   const isGenerating = shot.interval?.status === 'generating';
   const hasVideo = !!shot.interval?.videoUrl;
   const resolvedVideoSrc = useResolvedVideoUrl(shot.interval?.videoUrl);
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const dubbingPreviewRef = useRef<HTMLAudioElement | null>(null);
+
+  // 配音模型与状态
+  const audioModels = getAudioModels().filter((m) => m.isEnabled);
+  const activeAudioModel = getActiveAudioModel();
+  const [dubbingMode, setDubbingMode] = useState<DubbingMode>(shot.dubbing?.mode || 'narration');
+  const [selectedAudioModelId, setSelectedAudioModelId] = useState<string>(
+    shot.dubbing?.modelId || activeAudioModel?.id || audioModels[0]?.id || 'gpt-audio-1.5'
+  );
+  const [dubbingText, setDubbingText] = useState<string>(shot.dubbing?.text || '');
+  const isGeneratingDubbing = shot.dubbing?.status === 'generating';
+  const hasDubbingAudio = !!shot.dubbing?.audioUrl;
+  const resolvedDubbingModel = audioModels.find((m) => m.id === selectedAudioModelId) as AudioModelDefinition | undefined;
+  const fallbackDubbingText = useMemo(
+    () => (dubbingMode === 'dialogue' ? (shot.dialogue || '') : (shot.actionSummary || '')).trim(),
+    [dubbingMode, shot.dialogue, shot.actionSummary]
+  );
+  const canGenerateDubbing = dubbingText.trim().length > 0 && !!selectedAudioModelId && !isGeneratingDubbing;
 
   // 当模型变化时，更新横竖屏和时长的默认值
   useEffect(() => {
@@ -122,6 +147,15 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
     setVeoFastQuality(resolveVeoFastQuality(shot.videoModel));
   }, [shot.videoModel]);
 
+  useEffect(() => {
+    const initialMode = shot.dubbing?.mode || 'narration';
+    const initialModelId = shot.dubbing?.modelId || activeAudioModel?.id || audioModels[0]?.id || 'gpt-audio-1.5';
+    const initialText = (shot.dubbing?.text || (initialMode === 'dialogue' ? shot.dialogue : shot.actionSummary) || '').trim();
+    setDubbingMode(initialMode);
+    setSelectedAudioModelId(initialModelId);
+    setDubbingText(initialText);
+  }, [shot.id, activeAudioModel?.id]);
+
   const handleGenerate = () => {
     onGenerate(aspectRatio, duration, effectiveModelId);
   };
@@ -135,6 +169,25 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
   };
 
   const canGenerate = hasStartFrame && !isMissingVolcengineApiKey;
+
+  const handleGenerateDubbing = () => {
+    if (!canGenerateDubbing) return;
+    onGenerateDubbing(dubbingMode, dubbingText.trim(), selectedAudioModelId);
+  };
+
+  const handleSyncPreviewPlayback = async () => {
+    const videoEl = videoPreviewRef.current;
+    const audioEl = dubbingPreviewRef.current;
+    if (!videoEl || !audioEl) return;
+
+    try {
+      videoEl.currentTime = 0;
+      audioEl.currentTime = 0;
+      await Promise.all([videoEl.play(), audioEl.play()]);
+    } catch (error) {
+      // 浏览器策略可能阻止自动播放，保留控件让用户手动播放
+    }
+  };
 
   return (
     <div className="bg-[var(--bg-surface)] rounded-xl p-5 border border-[var(--border-primary)] space-y-4">
@@ -308,13 +361,158 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
       {/* Video Preview */}
       {hasVideo ? (
         <div className="w-full aspect-video bg-[var(--bg-base)] rounded-lg overflow-hidden border border-[var(--border-secondary)] relative shadow-lg">
-          <video src={resolvedVideoSrc} controls className="w-full h-full" />
+          <video ref={videoPreviewRef} src={resolvedVideoSrc} controls className="w-full h-full" />
         </div>
       ) : (
         <div className="w-full aspect-video bg-[var(--nav-hover-bg)] rounded-lg border border-dashed border-[var(--border-primary)] flex items-center justify-center">
           <span className="text-xs text-[var(--text-muted)] font-mono">PREVIEW AREA</span>
         </div>
       )}
+
+      {/* Dubbing Panel */}
+      <div className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-base)] p-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <h5 className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-tertiary)] flex items-center gap-2">
+            <Mic className="w-3 h-3 text-[var(--accent)]" />
+            配音
+          </h5>
+          {shot.dubbing?.status === 'completed' && (
+            <span className="text-[9px] text-[var(--success)] font-mono">● READY</span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setDubbingMode('narration');
+              if (!shot.dubbing?.text || dubbingMode !== 'narration') {
+                setDubbingText((shot.actionSummary || '').trim());
+              }
+            }}
+            className={`px-2 py-2 rounded border text-[10px] font-bold uppercase tracking-wider transition-colors ${
+              dubbingMode === 'narration'
+                ? 'border-[var(--accent-border)] bg-[var(--accent-bg)] text-[var(--accent-text)]'
+                : 'border-[var(--border-primary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
+            }`}
+            disabled={isGeneratingDubbing}
+          >
+            旁白
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDubbingMode('dialogue');
+              if (!shot.dubbing?.text || dubbingMode !== 'dialogue') {
+                setDubbingText((shot.dialogue || '').trim());
+              }
+            }}
+            className={`px-2 py-2 rounded border text-[10px] font-bold uppercase tracking-wider transition-colors ${
+              dubbingMode === 'dialogue'
+                ? 'border-[var(--accent-border)] bg-[var(--accent-bg)] text-[var(--accent-text)]'
+                : 'border-[var(--border-primary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
+            }`}
+            disabled={isGeneratingDubbing}
+          >
+            对话
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-bold text-[var(--text-tertiary)] uppercase tracking-widest block">
+            选择配音模型
+          </label>
+          <select
+            value={selectedAudioModelId}
+            onChange={(e) => setSelectedAudioModelId(e.target.value)}
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-primary)] text-[var(--text-primary)] text-xs rounded-lg px-3 py-2 outline-none focus:border-[var(--accent)]"
+            disabled={isGeneratingDubbing}
+          >
+            {audioModels.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-[9px] text-[var(--text-muted)]">
+            {resolvedDubbingModel
+              ? `默认音色 ${resolvedDubbingModel.params.defaultVoice} · 输出 ${resolvedDubbingModel.params.outputFormat}`
+              : '请先在模型配置中启用配音模型'}
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-bold text-[var(--text-tertiary)] uppercase tracking-widest">
+              配音文本
+            </label>
+            <button
+              type="button"
+              onClick={() => setDubbingText(fallbackDubbingText)}
+              className="text-[9px] text-[var(--accent-text)] hover:text-[var(--text-primary)]"
+              disabled={isGeneratingDubbing}
+            >
+              使用建议文本
+            </button>
+          </div>
+          <textarea
+            value={dubbingText}
+            onChange={(e) => setDubbingText(e.target.value)}
+            rows={3}
+            placeholder={dubbingMode === 'dialogue' ? '请输入对话文本' : '请输入旁白文本'}
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-primary)] text-[var(--text-primary)] text-xs rounded-lg px-3 py-2 outline-none focus:border-[var(--accent)] resize-y min-h-[72px]"
+            disabled={isGeneratingDubbing}
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleGenerateDubbing}
+            disabled={!canGenerateDubbing || !audioModels.length}
+            className="flex-1 py-2 rounded-lg bg-[var(--accent)] text-[var(--text-primary)] text-[10px] font-bold uppercase tracking-wider hover:bg-[var(--accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isGeneratingDubbing ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                生成中...
+              </>
+            ) : (
+              <>生成配音</>
+            )}
+          </button>
+          {shot.dubbing && (
+            <button
+              type="button"
+              onClick={onClearDubbing}
+              disabled={isGeneratingDubbing}
+              className="px-3 py-2 rounded-lg border border-[var(--border-secondary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+              title="清除当前配音"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {shot.dubbing?.error && (
+          <p className="text-[9px] text-[var(--error-text)]">{shot.dubbing.error}</p>
+        )}
+
+        {hasDubbingAudio && (
+          <div className="space-y-2">
+            <audio ref={dubbingPreviewRef} src={shot.dubbing?.audioUrl} controls className="w-full" />
+            {hasVideo && (
+              <button
+                type="button"
+                onClick={handleSyncPreviewPlayback}
+                className="w-full py-2 rounded-lg border border-[var(--border-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[10px] font-bold uppercase tracking-wider"
+              >
+                同步试听（视频 + 配音）
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Generate Button */}
       <button

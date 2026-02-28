@@ -9,15 +9,18 @@ import {
   ModelType, 
   ModelDefinition,
   ImageApiFormat,
+  AudioOutputFormat,
   ChatModelParams,
   ImageModelParams,
   VideoModelParams,
+  AudioModelParams,
   DEFAULT_CHAT_PARAMS,
   DEFAULT_IMAGE_PARAMS,
   DEFAULT_IMAGE_PARAMS_OPENAI,
   DEFAULT_VIDEO_PARAMS_SORA,
   DEFAULT_VIDEO_PARAMS_VEO,
   DEFAULT_VIDEO_PARAMS_DOUBAO_SEEDANCE,
+  DEFAULT_AUDIO_PARAMS,
 } from '../../types/model';
 import { getProviders, addProvider } from '../../services/modelRegistry';
 import { useAlert } from '../GlobalAlert';
@@ -39,6 +42,8 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
   const [apiKey, setApiKey] = useState('');
   const [imageApiFormat, setImageApiFormat] = useState<ImageApiFormat>('gemini');
   const [videoMode, setVideoMode] = useState<'sync' | 'async' | 'task'>('sync');
+  const [audioVoice, setAudioVoice] = useState<string>(DEFAULT_AUDIO_PARAMS.defaultVoice);
+  const [audioOutputFormat, setAudioOutputFormat] = useState<AudioOutputFormat>(DEFAULT_AUDIO_PARAMS.outputFormat);
   
   // 提供商配置
   const [providerMode, setProviderMode] = useState<'existing' | 'custom'>('existing');
@@ -83,7 +88,7 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
     }
 
     // 根据模型类型设置默认参数
-    let params: ChatModelParams | ImageModelParams | VideoModelParams;
+    let params: ChatModelParams | ImageModelParams | VideoModelParams | AudioModelParams;
     let resolvedEndpoint = endpoint.trim() || undefined;
     
     if (type === 'chat') {
@@ -100,7 +105,7 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
             ? '/v1/images/generations'
             : '/v1beta/models/{model}:generateContent';
       }
-    } else {
+    } else if (type === 'video') {
       params =
         videoMode === 'sync'
           ? { ...DEFAULT_VIDEO_PARAMS_VEO }
@@ -115,6 +120,15 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
             : videoMode === 'task'
               ? '/api/v3/contents/generations/tasks'
               : '/v1/videos';
+      }
+    } else {
+      params = {
+        ...DEFAULT_AUDIO_PARAMS,
+        defaultVoice: audioVoice.trim() || DEFAULT_AUDIO_PARAMS.defaultVoice,
+        outputFormat: audioOutputFormat,
+      };
+      if (!resolvedEndpoint) {
+        resolvedEndpoint = '/v1/chat/completions';
       }
     }
 
@@ -207,6 +221,33 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
         </div>
       )}
 
+      {/* 配音模型特有选项 */}
+      {type === 'audio' && (
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">默认音色</label>
+            <input
+              type="text"
+              value={audioVoice}
+              onChange={(e) => setAudioVoice(e.target.value)}
+              placeholder="如：alloy"
+              className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">输出格式</label>
+            <select
+              value={audioOutputFormat}
+              onChange={(e) => setAudioOutputFormat(e.target.value as AudioOutputFormat)}
+              className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)]"
+            >
+              <option value="wav">wav</option>
+              <option value="mp3">mp3</option>
+            </select>
+          </div>
+        </div>
+      )}
+
       {/* API 端点 */}
       <div>
         <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">API 端点 (Endpoint)</label>
@@ -221,7 +262,9 @@ const AddModelForm: React.FC<AddModelFormProps> = ({ type, onSave, onCancel }) =
                 ? imageApiFormat === 'openai'
                   ? '/v1/images/generations'
                   : '/v1beta/models/{model}:generateContent'
-                : '/v1/videos 或 /api/v3/contents/generations/tasks'
+                : type === 'video'
+                  ? '/v1/videos 或 /api/v3/contents/generations/tasks'
+                  : '/v1/chat/completions'
           }
           className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] font-mono"
         />

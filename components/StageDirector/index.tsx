@@ -9,8 +9,9 @@ import {
   NineGridPanel,
   NineGridData,
   StoryboardGridPanelCount,
+  DubbingMode,
 } from '../../types';
-import { generateImage, generateVideo, generateActionSuggestion, optimizeKeyframePrompt, optimizeBothKeyframes, enhanceKeyframePrompt, splitShotIntoSubShots, generateNineGridPanels, generateNineGridImage, getNegativePrompt, compressPromptWithLLM } from '../../services/aiService';
+import { generateImage, generateVideo, generateActionSuggestion, optimizeKeyframePrompt, optimizeBothKeyframes, enhanceKeyframePrompt, splitShotIntoSubShots, generateNineGridPanels, generateNineGridImage, getNegativePrompt, compressPromptWithLLM, generateDubbingAudio } from '../../services/aiService';
 import { 
   getRefImagesForShot, 
   getPropsInfoForShot,
@@ -39,7 +40,7 @@ import ImagePreviewModal from './ImagePreviewModal';
 import NineGridPreview from './NineGridPreview';
 import { useAlert } from '../GlobalAlert';
 import { AspectRatioSelector } from '../AspectRatioSelector';
-import { getUserAspectRatio, setUserAspectRatio, getModelById, getActiveImageModel } from '../../services/modelRegistry';
+import { getUserAspectRatio, setUserAspectRatio, getModelById, getActiveImageModel, getActiveAudioModel } from '../../services/modelRegistry';
 import { persistVideoReference } from '../../services/videoStorageService';
 import { runKeyframePreflight, runVideoPreflight, formatLintIssues } from '../../services/promptLintService';
 import { assessShotQuality, getProjectAverageQualityScore } from '../../services/qualityAssessmentService';
@@ -228,8 +229,9 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
     const hasStuckGenerating = project.shots.some(shot => {
       const stuckKeyframes = shot.keyframes?.some(kf => kf.status === 'generating');
       const stuckVideo = shot.interval?.status === 'generating';
+      const stuckDubbing = shot.dubbing?.status === 'generating';
       const stuckNineGrid = shot.nineGrid?.status === 'generating_panels' || shot.nineGrid?.status === 'generating_image' || (shot.nineGrid?.status as string) === 'generating';
-      return stuckKeyframes || stuckVideo || stuckNineGrid;
+      return stuckKeyframes || stuckVideo || stuckDubbing || stuckNineGrid;
     });
 
     if (hasStuckGenerating) {
@@ -247,6 +249,9 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
             interval: shot.interval && shot.interval.status === 'generating'
               ? { ...shot.interval, status: 'failed' as const }
               : shot.interval,
+            dubbing: shot.dubbing && shot.dubbing.status === 'generating'
+              ? { ...shot.dubbing, status: 'failed' as const, error: '任务中断，请重新生成' }
+              : shot.dubbing,
             nineGrid: shot.nineGrid && (shot.nineGrid.status === 'generating_panels' || shot.nineGrid.status === 'generating_image' || (shot.nineGrid.status as string) === 'generating')
               ? { ...shot.nineGrid, status: 'failed' as const }
               : shot.nineGrid
@@ -267,11 +272,20 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
     const hasGeneratingVideo = project.shots.some(shot => 
       shot.interval?.status === 'generating'
     );
+    const hasGeneratingDubbing = project.shots.some(
+      shot => shot.dubbing?.status === 'generating'
+    );
     const hasGeneratingNineGrid = project.shots.some(shot => 
       shot.nineGrid?.status === 'generating_panels' || shot.nineGrid?.status === 'generating_image'
     );
     
-    const generating = !!batchProgress || hasGeneratingKeyframes || hasGeneratingVideo || hasGeneratingNineGrid || isSplittingShot;
+    const generating =
+      !!batchProgress ||
+      hasGeneratingKeyframes ||
+      hasGeneratingVideo ||
+      hasGeneratingDubbing ||
+      hasGeneratingNineGrid ||
+      isSplittingShot;
     onGeneratingChange?.(generating);
   }, [batchProgress, project.shots, isSplittingShot]);
 
@@ -733,6 +747,76 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
       
       if (onApiKeyError && onApiKeyError(e)) return;
       showAlert(`视频生成失败: ${formatUserFriendlyError(e, '请稍后重试。')}`, { type: 'error' });
+    }
+  };
+
+  /**
+   * 生成镜头配音（旁白 / 对话）
+   */
+  const handleGenerateDubbing = async (
+    shot: Shot,
+    mode: DubbingMode,
+    text: string,
+    modelId?: string
+  ) => {
+    const cleanText = (text || '').trim();
+    if (!cleanText) {
+      showAlert(mode === 'dialogue' ? '请先填写对话文本' : '请先填写旁白文本', { type: 'warning' });
+      return;
+    }
+
+    const selectedModelId = modelId || shot.dubbing?.modelId || getActiveAudioModel()?.id || 'gpt-audio-1.5';
+
+    updateShot(shot.id, (s) => ({
+      ...s,
+      dubbing: {
+        mode,
+        text: cleanText,
+        modelId: selectedModelId,
+        status: 'generating',
+      },
+    }));
+
+    try {
+      const result = await generateDubbingAudio({
+        text: cleanText,
+        mode,
+        model: selectedModelId,
+        language: project.language || project.scriptData?.language || '中文',
+      });
+
+      updateShot(shot.id, (s) => ({
+        ...s,
+        dubbing: {
+          mode,
+          text: cleanText,
+          modelId: selectedModelId,
+          voice: result.usedVoice,
+          outputFormat: result.usedFormat,
+          transcript: result.transcript,
+          audioUrl: result.audioDataUrl,
+          status: 'completed',
+          generatedAt: Date.now(),
+        },
+      }));
+
+      showAlert('配音生成成功', { type: 'success' });
+    } catch (e: any) {
+      console.error('配音生成失败:', e);
+
+      updateShot(shot.id, (s) => ({
+        ...s,
+        dubbing: {
+          mode,
+          text: cleanText,
+          modelId: selectedModelId,
+          status: 'failed',
+          error: formatUserFriendlyError(e, '配音生成失败，请稍后重试。'),
+        },
+      }));
+
+      if (onApiKeyError && onApiKeyError(e)) return;
+      showAlert(`配音生成失败: ${formatUserFriendlyError(e, '请稍后重试。')}`, { type: 'error' });
     }
   };
 
@@ -1634,6 +1718,13 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
             useAIEnhancement={useAIEnhancement}
             onToggleAIEnhancement={() => setUseAIEnhancement(!useAIEnhancement)}
             onGenerateVideo={(aspectRatio, duration, modelId) => handleGenerateVideo(activeShot, aspectRatio, duration, modelId)}
+            onGenerateDubbing={(mode, text, modelId) => handleGenerateDubbing(activeShot, mode, text, modelId)}
+            onClearDubbing={() =>
+              updateShot(activeShot.id, (s) => ({
+                ...s,
+                dubbing: undefined,
+              }))
+            }
             onVideoModelChange={(modelId) => {
               const model = getModelById(modelId);
               const lines = [

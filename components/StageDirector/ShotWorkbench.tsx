@@ -22,6 +22,7 @@ import {
   ProjectState,
   AspectRatio,
   VideoDuration,
+  DubbingMode,
   NineGridData,
   NineGridPanel,
   StoryboardGridPanelCount,
@@ -70,6 +71,8 @@ interface ShotWorkbenchProps {
   useAIEnhancement: boolean;
   onToggleAIEnhancement: () => void;
   onGenerateVideo: (aspectRatio: AspectRatio, duration: VideoDuration, modelId: string) => void;
+  onGenerateDubbing: (mode: DubbingMode, text: string, modelId?: string) => void;
+  onClearDubbing: () => void;
   onEditVideoPrompt: () => void;
   onVideoModelChange: (modelId: string) => void;
   onImageClick: (url: string, title: string) => void;
@@ -117,6 +120,8 @@ const ShotWorkbench: React.FC<ShotWorkbenchProps> = ({
   useAIEnhancement,
   onToggleAIEnhancement,
   onGenerateVideo,
+  onGenerateDubbing,
+  onClearDubbing,
   onEditVideoPrompt,
   onVideoModelChange,
   onImageClick,
@@ -853,6 +858,8 @@ const ShotWorkbench: React.FC<ShotWorkbenchProps> = ({
                 hasStartFrame={hasStartFrame}
                 hasEndFrame={hasEndFrame}
                 onGenerate={onGenerateVideo}
+                onGenerateDubbing={onGenerateDubbing}
+                onClearDubbing={onClearDubbing}
                 onEditPrompt={onEditVideoPrompt}
                 onModelChange={(modelId) => {
                   setLocalVideoModelId(modelId);

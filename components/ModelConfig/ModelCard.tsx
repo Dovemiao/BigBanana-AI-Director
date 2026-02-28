@@ -10,6 +10,7 @@ import {
   ChatModelParams,
   ImageModelParams,
   VideoModelParams,
+  AudioModelParams,
   AspectRatio,
   VideoDuration
 } from '../../types/model';
@@ -169,6 +170,32 @@ const ModelCard: React.FC<ModelCardProps> = ({
     </div>
   );
 
+  const renderAudioParams = (params: AudioModelParams) => (
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">默认音色</label>
+        <input
+          type="text"
+          value={editParams.defaultVoice || params.defaultVoice}
+          onChange={(e) => handleParamChange('defaultVoice', e.target.value)}
+          className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)]"
+          placeholder="alloy"
+        />
+      </div>
+      <div>
+        <label className="text-[10px] text-[var(--text-tertiary)] block mb-1">输出格式</label>
+        <select
+          value={editParams.outputFormat || params.outputFormat}
+          onChange={(e) => handleParamChange('outputFormat', e.target.value)}
+          className="w-full bg-[var(--bg-hover)] border border-[var(--border-secondary)] rounded px-3 py-2 text-xs text-[var(--text-primary)]"
+        >
+          <option value="wav">wav</option>
+          <option value="mp3">mp3</option>
+        </select>
+      </div>
+    </div>
+  );
+
   const apiModelLabel = model.apiModel || model.id;
 
   return (
@@ -297,6 +324,7 @@ const ModelCard: React.FC<ModelCardProps> = ({
             {model.type === 'chat' && renderChatParams(model.params)}
             {model.type === 'image' && renderImageParams(model.params)}
             {model.type === 'video' && renderVideoParams(model.params)}
+            {model.type === 'audio' && renderAudioParams(model.params)}
           </div>
         </div>
       )}

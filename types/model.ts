@@ -10,7 +10,7 @@
 /**
  * 模型类型
  */
-export type ModelType = 'chat' | 'image' | 'video';
+export type ModelType = 'chat' | 'image' | 'video' | 'audio';
 
 /**
  * 横竖屏比例类型
@@ -33,6 +33,11 @@ export type VideoDuration = 4 | 5 | 8 | 10 | 12 | 15;
  * 视频生成模式
  */
 export type VideoMode = 'sync' | 'async';
+
+/**
+ * 音频输出格式
+ */
+export type AudioOutputFormat = 'wav' | 'mp3';
 
 // ============================================
 // 模型参数配置
@@ -70,9 +75,17 @@ export interface VideoModelParams {
 }
 
 /**
+ * 配音模型参数
+ */
+export interface AudioModelParams {
+  defaultVoice: string;                   // 默认音色
+  outputFormat: AudioOutputFormat;        // 输出音频格式
+}
+
+/**
  * 模型参数联合类型
  */
-export type ModelParams = ChatModelParams | ImageModelParams | VideoModelParams;
+export type ModelParams = ChatModelParams | ImageModelParams | VideoModelParams | AudioModelParams;
 
 // ============================================
 // 模型定义
@@ -119,9 +132,21 @@ export interface VideoModelDefinition extends ModelDefinitionBase {
 }
 
 /**
+ * 配音模型定义
+ */
+export interface AudioModelDefinition extends ModelDefinitionBase {
+  type: 'audio';
+  params: AudioModelParams;
+}
+
+/**
  * 模型定义联合类型
  */
-export type ModelDefinition = ChatModelDefinition | ImageModelDefinition | VideoModelDefinition;
+export type ModelDefinition =
+  | ChatModelDefinition
+  | ImageModelDefinition
+  | VideoModelDefinition
+  | AudioModelDefinition;
 
 // ============================================
 // 提供商定义
@@ -150,6 +175,7 @@ export interface ActiveModels {
   chat: string;                  // 当前激活的对话模型 ID
   image: string;                 // 当前激活的图片模型 ID
   video: string;                 // 当前激活的视频模型 ID
+  audio: string;                 // 当前激活的配音模型 ID
 }
 
 /**
@@ -272,6 +298,14 @@ export const DEFAULT_VIDEO_PARAMS_DOUBAO_SEEDANCE: VideoModelParams = {
   supportedAspectRatios: ['16:9', '9:16'],
   defaultDuration: 5,
   supportedDurations: [5, 10, 15],
+};
+
+/**
+ * 默认配音模型参数
+ */
+export const DEFAULT_AUDIO_PARAMS: AudioModelParams = {
+  defaultVoice: 'alloy',
+  outputFormat: 'wav',
 };
 
 // ============================================
@@ -429,6 +463,36 @@ export const BUILTIN_VIDEO_MODELS: VideoModelDefinition[] = [
 ];
 
 /**
+ * 内置配音模型列表
+ */
+export const BUILTIN_AUDIO_MODELS: AudioModelDefinition[] = [
+  {
+    id: 'gpt-audio-1.5',
+    apiModel: 'gpt-audio-1.5',
+    name: 'GPT Audio 1.5',
+    type: 'audio',
+    providerId: 'antsk',
+    endpoint: '/v1/chat/completions',
+    description: '高质量配音模型，适合情绪表达与影视旁白',
+    isBuiltIn: true,
+    isEnabled: true,
+    params: { ...DEFAULT_AUDIO_PARAMS },
+  },
+  {
+    id: 'gpt-audio-mini',
+    apiModel: 'gpt-audio-mini',
+    name: 'GPT Audio Mini',
+    type: 'audio',
+    providerId: 'antsk',
+    endpoint: '/v1/chat/completions',
+    description: '轻量配音模型，速度更快，适合快速迭代',
+    isBuiltIn: true,
+    isEnabled: true,
+    params: { ...DEFAULT_AUDIO_PARAMS },
+  },
+];
+
+/**
  * 内置提供商列表
  */
 export const BUILTIN_PROVIDERS: ModelProvider[] = [
@@ -455,6 +519,7 @@ export const ALL_BUILTIN_MODELS: ModelDefinition[] = [
   ...BUILTIN_CHAT_MODELS,
   ...BUILTIN_IMAGE_MODELS,
   ...BUILTIN_VIDEO_MODELS,
+  ...BUILTIN_AUDIO_MODELS,
 ];
 
 /**
@@ -464,4 +529,5 @@ export const DEFAULT_ACTIVE_MODELS: ActiveModels = {
   chat: 'gpt-5.2',
   image: 'gemini-3-pro-image-preview',
   video: 'sora-2',
+  audio: 'gpt-audio-1.5',
 };

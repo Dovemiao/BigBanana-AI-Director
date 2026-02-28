@@ -11,11 +11,13 @@ import {
   ChatModelDefinition,
   ImageModelDefinition,
   VideoModelDefinition,
+  AudioModelDefinition,
 } from '../types/model';
 import {
   getChatModels,
   getImageModels,
   getVideoModels,
+  getAudioModels,
 } from '../services/modelRegistry';
 
 interface ModelSelectorProps {
@@ -31,6 +33,7 @@ const typeLabels: Record<ModelType, string> = {
   chat: '对话模型',
   image: '图片模型',
   video: '视频模型',
+  audio: '配音模型',
 };
 
 const ModelSelector: React.FC<ModelSelectorProps> = ({
@@ -53,6 +56,9 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
         break;
       case 'video':
         models = getVideoModels();
+        break;
+      case 'audio':
+        models = getAudioModels();
         break;
     }
     return models.filter(m => m.isEnabled);
@@ -156,6 +162,46 @@ export const VideoModelSelector: React.FC<{
           {selectedModel.params.supportedDurations.length > 1 && 
             ` · 支持时长: ${selectedModel.params.supportedDurations.join('/')}秒`
           }
+        </p>
+      )}
+    </div>
+  );
+};
+
+/**
+ * 配音模型选择器
+ */
+export const AudioModelSelector: React.FC<{
+  value: string;
+  onChange: (modelId: string) => void;
+  disabled?: boolean;
+}> = ({ value, onChange, disabled }) => {
+  const models = getAudioModels().filter(m => m.isEnabled);
+  const selectedModel = models.find(m => m.id === value) as AudioModelDefinition | undefined;
+
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] font-bold text-[var(--text-tertiary)] uppercase tracking-widest">
+        配音模型
+      </label>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          className="w-full appearance-none bg-[var(--bg-surface)] border border-[var(--border-primary)] text-[var(--text-primary)] text-xs rounded-lg px-3 py-2.5 pr-8 focus:border-[var(--accent)] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+        >
+          {models.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)] pointer-events-none" />
+      </div>
+      {selectedModel && (
+        <p className="text-[9px] text-[var(--text-muted)]">
+          默认音色: {selectedModel.params.defaultVoice} · 输出格式: {selectedModel.params.outputFormat}
         </p>
       )}
     </div>

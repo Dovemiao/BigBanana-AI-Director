@@ -12,6 +12,7 @@ import {
   ChatModelDefinition,
   ImageModelDefinition,
   VideoModelDefinition,
+  AudioModelDefinition,
   BUILTIN_PROVIDERS,
   ALL_BUILTIN_MODELS,
   DEFAULT_ACTIVE_MODELS,
@@ -66,6 +67,12 @@ export const loadRegistry = (): ModelRegistryState => {
         'veo_3_1_i2v_s_fast_fl_landscape',
         'veo_3_1_i2v_s_fast_fl_portrait',
       ];
+
+      // 兼容旧版本：activeModels 可能缺少 audio 字段
+      parsed.activeModels = {
+        ...DEFAULT_ACTIVE_MODELS,
+        ...(parsed.activeModels || {}),
+      };
       
       // 确保内置模型和提供商始终存在
       const builtInProviderIds = BUILTIN_PROVIDERS.map(p => p.id);
@@ -177,6 +184,18 @@ export const loadRegistry = (): ModelRegistryState => {
         parsed.activeModels.video = DEFAULT_ACTIVE_MODELS.video;
         activeModelMigrated = true;
       }
+
+      // 校验各类型激活模型都存在且可用
+      (['chat', 'image', 'audio'] as ModelType[]).forEach((type) => {
+        const activeModelId = parsed.activeModels[type];
+        const activeExists = parsed.models.some(
+          (m) => m.type === type && m.id === activeModelId && m.isEnabled
+        );
+        if (!activeExists) {
+          parsed.activeModels[type] = DEFAULT_ACTIVE_MODELS[type];
+          activeModelMigrated = true;
+        }
+      });
       
       // 同步全局 API Key
       parsed.globalApiKey = localStorage.getItem(API_KEY_STORAGE_KEY) || parsed.globalApiKey;
@@ -366,6 +385,13 @@ export const getVideoModels = (): VideoModelDefinition[] => {
 };
 
 /**
+ * 获取配音模型列表
+ */
+export const getAudioModels = (): AudioModelDefinition[] => {
+  return getModels('audio') as AudioModelDefinition[];
+};
+
+/**
  * 根据 ID 获取模型
  */
 export const getModelById = (id: string): ModelDefinition | undefined => {
@@ -400,6 +426,13 @@ export const getActiveImageModel = (): ImageModelDefinition | undefined => {
  */
 export const getActiveVideoModel = (): VideoModelDefinition | undefined => {
   return getActiveModel('video') as VideoModelDefinition | undefined;
+};
+
+/**
+ * 获取当前激活的配音模型
+ */
+export const getActiveAudioModel = (): AudioModelDefinition | undefined => {
+  return getActiveModel('audio') as AudioModelDefinition | undefined;
 };
 
 /**

@@ -27,6 +27,7 @@ export {
   getActiveChatModel,
   getActiveVideoModel,
   getActiveImageModel,
+  getActiveAudioModel,
   // 日志回调
   setScriptLogCallback,
   clearScriptLogCallback,
@@ -76,6 +77,14 @@ export {
 export {
   generateVideo,
 } from './videoService';
+
+// 配音生成服务
+export {
+  generateDubbingAudio,
+  type DubbingMode,
+  type GenerateDubbingAudioOptions,
+  type GenerateDubbingAudioResult,
+} from './audioService';
 
 // 分镜辅助服务
 export {
