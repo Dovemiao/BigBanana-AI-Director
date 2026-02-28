@@ -360,12 +360,18 @@ export const buildKeyframePromptWithAI = async (
  * @param videoDuration - 视频总时长（秒），用于计算九宫格模式下每个面板的停留时间
  */
 const MAX_VIDEO_PROMPT_CHARS = 5000;
+const NINE_GRID_VIDEO_GUARDRAIL_MARKER = '[NINE_GRID_FULLSCREEN_SEQUENCE_RULES_V2]';
 
 const normalizePromptField = (input: string): string =>
   String(input || '')
     .replace(/\r/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+
+const isChineseLanguage = (language: string): boolean => {
+  const normalized = String(language || '').trim().toLowerCase();
+  return normalized === '中文' || normalized === 'chinese' || normalized.startsWith('zh');
+};
 
 const compactPromptField = (
   input: string,
@@ -390,6 +396,38 @@ const compactPromptField = (
   return candidate.length < normalized.length ? `${candidate}...` : candidate;
 };
 
+const buildNineGridVideoGuardrails = (panelCount: number, language: string): string => {
+  const count = Math.max(1, Math.floor(panelCount || 1));
+  if (isChineseLanguage(language)) {
+    return `${NINE_GRID_VIDEO_GUARDRAIL_MARKER}
+HARD RULES（最高优先级）：
+- 视频必须始终为单画面全屏输出，任意时刻只能有一个镜头占满100%画面。
+- 严禁九宫格/六宫格/四宫格分屏、拼贴、画中画、多窗口、缩略图墙、多个面板并行动画。
+- 网格图只作为镜头顺序参考，不是可展示内容。
+- 镜头必须按 1→${count} 顺序逐个切换（可硬切或自然转场），禁止多个面板同时出现或同时运动。
+- 若冲突，优先保证“单画面全屏 + 顺序切镜”，宁可忽略网格排版外观。`;
+  }
+
+  return `${NINE_GRID_VIDEO_GUARDRAIL_MARKER}
+HARD RULES (HIGHEST PRIORITY):
+- The video must remain single-shot full-screen at all times, with exactly one shot occupying 100% of the frame.
+- Strictly forbid split-screen, collage, picture-in-picture, multi-window, thumbnail wall, or parallel multi-panel animation.
+- The grid image is shot-order reference only, never visible output content.
+- Transition strictly in order 1→${count}, one shot at a time (hard cuts or motivated transitions); never show multiple panels simultaneously.
+- If constraints conflict, prioritize "single full-screen shot + sequential cuts" over preserving the grid layout appearance.`;
+};
+
+export const ensureNineGridVideoPromptGuardrails = (
+  prompt: string,
+  panelCount: number,
+  language: string
+): string => {
+  const base = String(prompt || '').trim();
+  if (!base) return base;
+  if (base.includes(NINE_GRID_VIDEO_GUARDRAIL_MARKER)) return base;
+  return `${base}\n\n${buildNineGridVideoGuardrails(panelCount, language)}`;
+};
+
 const buildNineGridPanelDescriptionsWithBudget = (
   panels: NineGridPanel[],
   budgetChars: number
@@ -399,7 +437,7 @@ const buildNineGridPanelDescriptionsWithBudget = (
   const prefixes = panels.map((panel, idx) => {
     const shotSize = normalizePromptField(panel.shotSize) || 'shot';
     const cameraAngle = normalizePromptField(panel.cameraAngle) || 'angle';
-    return `${idx + 1}. ${shotSize}/${cameraAngle} - `;
+    return `${idx + 1}. [FULLSCREEN] ${shotSize}/${cameraAngle} - `;
   });
 
   const overhead = prefixes.reduce((sum, prefix) => sum + Array.from(prefix).length, 0) + Math.max(0, panels.length - 1);
@@ -465,7 +503,7 @@ export const buildVideoPrompt = (
   promptTemplates?: PromptTemplateConfig
 ): string => {
   const templates = promptTemplates || resolvePromptTemplateConfig();
-  const isChinese = language === '中文' || language === 'Chinese';
+  const isChinese = isChineseLanguage(language);
   const stylePrompt = VISUAL_STYLE_PROMPTS[visualStyle] || visualStyle;
   const visualStyleAnchor = compactPromptField(`${visualStyle} (${stylePrompt})`, 220, 40);
   const compactActionSummary = compactPromptField(actionSummary, 900, 160);
@@ -525,7 +563,9 @@ export const buildVideoPrompt = (
       .replace('{cameraMovement}', compactCameraMovement)
       .replace('{visualStyle}', visualStyleAnchor)
       .replace('{language}', language);
-    return appendCapabilityNotes(routedPrompt);
+    return appendCapabilityNotes(
+      ensureNineGridVideoPromptGuardrails(routedPrompt, panelCount, language)
+    );
   }
   
   // 普通模式

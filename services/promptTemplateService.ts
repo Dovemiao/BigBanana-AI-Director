@@ -195,8 +195,9 @@ Technical Requirements:
 - Details: Maintain character appearance and scene environment consistency throughout
 - Audio: Voiceover/narration in {language} is allowed
 - Text constraints: No subtitles and no on-screen text (including title cards and UI text overlays)`,
-    sora2NineGridChinese: `⚠️ 最高优先级指令：参考图是{gridLayout}网格分镜板（共{panelCount}格），严禁在视频中展示！视频第一帧必须是面板1的全屏场景画面。
-⚠️ 绝对禁止：不要在视频任何帧展示网格原图、网格线、缩略图集或多画面拼贴。
+    sora2NineGridChinese: `⚠️ 最高优先级指令：参考图是{gridLayout}网格分镜板（共{panelCount}格），仅用于镜头顺序参考，严禁作为视频可见内容。
+⚠️ 视频第一帧必须是面板1的全屏场景画面（单画面占满100%屏幕）。
+⚠️ 绝对禁止：网格原图、网格线、缩略图拼贴、多画面分屏、画中画、多窗口并行动画。
 
 动作描述：{actionSummary}
 视觉风格锚点：{visualStyle}
@@ -204,11 +205,12 @@ Technical Requirements:
 网格镜头顺序（参考图从左到右、从上到下）：
 {panelDescriptions}
 
-视频从面板1全屏画面开始，按1→{panelCount}顺序切换视角，形成蒙太奇剪辑。
-每个视角约{secondsPerPanel}秒，镜头运动：{cameraMovement}
+镜头切换必须按1→{panelCount}顺序逐个出现；任意时刻只允许一个全屏镜头，禁止多个面板同时运动。
+每个视角约{secondsPerPanel}秒，可用硬切或自然转场，镜头运动：{cameraMovement}
 保持角色外观一致与电影质感。可{language}配音/旁白，但禁止字幕与任何画面文字。`,
-    sora2NineGridEnglish: `⚠️ HIGHEST PRIORITY: The reference image is a {gridLayout} storyboard grid ({panelCount} panels) - NEVER show it in the video! The first frame MUST be the full-screen scene from Panel 1.
-⚠️ FORBIDDEN: Do NOT show the grid image, grid lines, thumbnail collection, or multi-panel layout in ANY frame.
+    sora2NineGridEnglish: `⚠️ HIGHEST PRIORITY: The reference image is a {gridLayout} storyboard grid ({panelCount} panels), used ONLY as shot-order guidance and NEVER as visible video content.
+⚠️ The first frame MUST be the full-screen scene from Panel 1 (a single shot occupying 100% of the frame).
+⚠️ FORBIDDEN: grid image, grid lines, thumbnail collage, split-screen, picture-in-picture, multi-window, or parallel panel animation.
 
 Action: {actionSummary}
 Visual Style Anchor: {visualStyle}
@@ -216,8 +218,8 @@ Visual Style Anchor: {visualStyle}
 Storyboard shot sequence (reference grid, left-to-right, top-to-bottom):
 {panelDescriptions}
 
-Start video with Panel 1 full-screen, transition through 1→{panelCount} as a montage.
-~{secondsPerPanel}s per angle. Camera: {cameraMovement}
+Transition strictly in order 1→{panelCount}, one shot at a time; never animate multiple panels simultaneously.
+~{secondsPerPanel}s per angle using hard cuts or motivated transitions. Camera: {cameraMovement}
 Maintain character consistency, cinematic quality.
 Voiceover in {language} is allowed, but no subtitles or any on-screen text.`,
     veoStartOnly: `Use the provided start frame as the exact opening composition.

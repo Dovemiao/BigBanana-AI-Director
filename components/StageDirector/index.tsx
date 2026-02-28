@@ -29,6 +29,7 @@ import {
   replaceShotWithSubShots,
   buildPromptFromNineGridPanel,
   cropPanelFromNineGrid,
+  ensureNineGridVideoPromptGuardrails,
   resolveVideoModelRouting,
   routeVideoFrameInputs
 } from './utils';
@@ -634,6 +635,10 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
         promptTemplates
       );
     }
+    if (isNineGridMode) {
+      const panelCountForGuard = shot.nineGrid?.layout?.panelCount || shot.nineGrid?.panels?.length || 9;
+      videoPrompt = ensureNineGridVideoPromptGuardrails(videoPrompt, panelCountForGuard, projectLanguage);
+    }
 
     const videoPromptLength = Array.from(videoPrompt).length;
     if (videoPromptLength > 5000) {
@@ -655,7 +660,7 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
     const selectedModelConfig = (getModelById(selectedModelInput) || getModelById(selectedModel)) as any;
     const preflightResult = runVideoPreflight({
       prompt: videoPrompt,
-      hasStartFrame: !!sKf?.imageUrl,
+      hasStartFrame: !!routedFrames.startImage,
       hasEndFrame: !!routedFrames.endImage,
       modelId: selectedModel,
       supportsEndFrame: selectedModelRouting.supportsEndFrame,
@@ -1787,6 +1792,19 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
                   },
                   promptTemplates
                 );
+              }
+              const editProjectLanguage = project.language || project.scriptData?.language || '中文';
+              const editStartKf = activeShot.keyframes?.find(k => k.type === 'start');
+              const editVideoInputMode = activeShot.videoInputMode || getRecommendedVideoInputMode(activeShot.videoModel || DEFAULTS.videoModel);
+              const editIsNineGridMode = (
+                editVideoInputMode === 'storyboard-grid' &&
+                activeShot.nineGrid?.status === 'completed' &&
+                activeShot.nineGrid?.imageUrl &&
+                editStartKf?.imageUrl === activeShot.nineGrid.imageUrl
+              );
+              if (editIsNineGridMode && promptValue) {
+                const panelCountForGuard = activeShot.nineGrid?.layout?.panelCount || activeShot.nineGrid?.panels?.length || 9;
+                promptValue = ensureNineGridVideoPromptGuardrails(promptValue, panelCountForGuard, editProjectLanguage);
               }
               setEditModal({ 
                 type: 'video', 
