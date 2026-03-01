@@ -449,6 +449,18 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
       type === 'end' && startKf?.imageUrl && !referenceImages.includes(startKf.imageUrl)
         ? startKf.imageUrl
         : undefined;
+    const dedupedReferenceCount = new Set(
+      [...referenceImages, continuityReferenceImage]
+        .filter((img): img is string => !!img)
+        .map((img) => img.trim())
+        .filter(Boolean)
+    ).size;
+    const effectiveReferenceCount = Math.min(5, dedupedReferenceCount);
+    if (dedupedReferenceCount > 5) {
+      setToastMessage(
+        `参考图数量 ${dedupedReferenceCount} 超过模型上限，已自动限制为 5 张（含连贯性参考图）。`
+      );
+    }
 
     const activeImageModel = getActiveImageModel() as any;
     const preflightResult = runKeyframePreflight({
@@ -457,7 +469,7 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
       hasCharacters: (shot.characters?.length || 0) > 0,
       frameType: type,
       hasStartFrameImage: !!startKf?.imageUrl,
-      referenceImageCount: referenceImages.length + (continuityReferenceImage ? 1 : 0),
+      referenceImageCount: effectiveReferenceCount,
       aspectRatio: keyframeAspectRatio,
       supportedAspectRatios: activeImageModel?.params?.supportedAspectRatios,
     });
@@ -1397,6 +1409,12 @@ const StageDirector: React.FC<Props> = ({ project, updateProject, onApiKeyError,
     try {
       // 2. 基于最新 shot 快照收集参考图片，避免重试时引用过期闭包数据
       const refResult = getRefImagesForShot(shot, project.scriptData);
+      const dedupedRefCount = new Set(
+        refResult.images.map((img) => String(img || '').trim()).filter(Boolean)
+      ).size;
+      if (dedupedRefCount > 5) {
+        setToastMessage(`参考图数量 ${dedupedRefCount} 超过模型上限，已自动限制为 5 张。`);
+      }
       if (refResult.images.length === 0) {
         console.warn(`[NineGrid] shot=${shotId} 没有可用参考图，将仅按文案生成。`);
       }

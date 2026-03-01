@@ -530,9 +530,56 @@ const buildImageApiError = (status: number, backendMessage?: string): Error => {
 const MAX_IMAGE_PROMPT_CHARS = 5000;
 const IMAGE_PROMPT_SOFT_TARGET_CHARS = 4700;
 const MAX_NEGATIVE_PROMPT_TERMS = 64;
+const MAX_REFERENCE_IMAGES_PER_REQUEST = 5;
 const OPENAI_IMAGE_QUALITY = 'medium';
 const OPENAI_IMAGE_OUTPUT_FORMAT = 'png';
 const OPENAI_IMAGE_OUTPUT_COMPRESSION = 100;
+
+const normalizeReferenceImageValue = (input?: string): string => String(input || '').trim();
+
+const buildBoundedReferenceImages = (
+  referenceImages: string[],
+  continuityReferenceImage?: string
+): {
+  references: string[];
+  continuityReferenceImage?: string;
+  requestedCount: number;
+  droppedCount: number;
+} => {
+  const dedupedBase: string[] = [];
+  const seenBase = new Set<string>();
+  referenceImages.forEach((img) => {
+    const normalized = normalizeReferenceImageValue(img);
+    if (!normalized || seenBase.has(normalized)) return;
+    seenBase.add(normalized);
+    dedupedBase.push(normalized);
+  });
+
+  const normalizedContinuity = normalizeReferenceImageValue(continuityReferenceImage);
+  const hasContinuity = !!normalizedContinuity;
+  const baseWithoutContinuity = hasContinuity
+    ? dedupedBase.filter((img) => img !== normalizedContinuity)
+    : dedupedBase;
+
+  let boundedReferences: string[];
+  if (hasContinuity) {
+    // Reserve one slot for continuity and keep it as the final reference.
+    const head = baseWithoutContinuity.slice(0, Math.max(0, MAX_REFERENCE_IMAGES_PER_REQUEST - 1));
+    boundedReferences = [...head, normalizedContinuity];
+  } else {
+    boundedReferences = baseWithoutContinuity.slice(0, MAX_REFERENCE_IMAGES_PER_REQUEST);
+  }
+
+  const requestedCount = dedupedBase.length + (hasContinuity && !dedupedBase.includes(normalizedContinuity) ? 1 : 0);
+  const droppedCount = Math.max(0, requestedCount - boundedReferences.length);
+
+  return {
+    references: boundedReferences,
+    continuityReferenceImage: hasContinuity ? normalizedContinuity : undefined,
+    requestedCount,
+    droppedCount,
+  };
+};
 
 const normalizePromptWhitespace = (input: string): string =>
   String(input || '')
@@ -779,9 +826,18 @@ export const generateImage = async (
   }
 ): Promise<string> => {
   const startTime = Date.now();
-  const continuityReferenceImage = options?.continuityReferenceImage;
+  const boundedReferences = buildBoundedReferenceImages(referenceImages, options?.continuityReferenceImage);
+  const effectiveReferenceImages = boundedReferences.references;
+  const continuityReferenceImage = boundedReferences.continuityReferenceImage;
   const referencePackType = options?.referencePackType || 'shot';
-  const hasAnyReference = referenceImages.length > 0 || !!continuityReferenceImage;
+  const hasAnyReference = effectiveReferenceImages.length > 0;
+
+  if (boundedReferences.droppedCount > 0) {
+    console.warn(
+      `[Image] Reference images capped at ${MAX_REFERENCE_IMAGES_PER_REQUEST}: ` +
+      `${boundedReferences.requestedCount} -> ${effectiveReferenceImages.length}`
+    );
+  }
 
   const activeImageModel = getActiveModel('image');
   const imageRoutingFamily = resolveImageModelRoutingFamily(activeImageModel);
@@ -811,7 +867,7 @@ Reference constraints (strict):
 Output one cinematic still image.`;
       } else {
         const referenceRoleLines = (() => {
-          if (referenceImages.length === 0) {
+          if (effectiveReferenceImages.length === 0) {
             return ['- No explicit reference pack is provided; use text prompt as primary composition source.'];
           }
 
@@ -962,10 +1018,7 @@ NEGATIVE PROMPT (strictly avoid): ${compactNegativePrompt}`;
     }
     finalPrompt = promptLimitResult.text;
 
-    const openAiReferenceSources = [...referenceImages];
-    if (continuityReferenceImage && !openAiReferenceSources.includes(continuityReferenceImage)) {
-      openAiReferenceSources.push(continuityReferenceImage);
-    }
+    const openAiReferenceSources = [...effectiveReferenceImages];
 
     if (imageApiFormat === 'openai') {
       const hasOpenAiReferences = openAiReferenceSources.length > 0;
@@ -1051,7 +1104,7 @@ NEGATIVE PROMPT (strictly avoid): ${compactNegativePrompt}`;
 
     // Gemini generateContent protocol
     const parts: any[] = [{ text: finalPrompt }];
-    referenceImages.forEach((imgUrl) => {
+    effectiveReferenceImages.forEach((imgUrl) => {
       const match = imgUrl.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
       if (match) {
         parts.push({
@@ -1062,18 +1115,6 @@ NEGATIVE PROMPT (strictly avoid): ${compactNegativePrompt}`;
         });
       }
     });
-
-    if (continuityReferenceImage && !referenceImages.includes(continuityReferenceImage)) {
-      const continuityMatch = continuityReferenceImage.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
-      if (continuityMatch) {
-        parts.push({
-          inlineData: {
-            mimeType: continuityMatch[1],
-            data: continuityMatch[2]
-          }
-        });
-      }
-    }
 
     const requestBody: any = {
       contents: [{
