@@ -265,6 +265,7 @@ docker-compose up -d --force-recreate
 - ✅ 允许个人学习和非商业用途
 - ✅ 允许修改和二次创作（需使用相同许可证）
 - ❌ 禁止商业用途（需获得商业授权）
+- test
 
 如需商业授权，请联系：antskpro@qq.com
 
